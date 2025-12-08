@@ -21,8 +21,9 @@ export async function POST(request: NextRequest) {
     const proxyAgent = new HttpsProxyAgent(PROXY_URL)
     const nodeFetch = (await import('node-fetch')).default
 
-    // 使用 Banana Pro (gemini-2.0-flash-exp-image-generation) 进行图片生成/编辑
-    const model = 'gemini-2.0-flash-exp-image-generation'
+    // 使用 Nano Banana Pro (gemini-3-pro-image-preview) 进行图片生成/编辑
+    // 支持2K/4K输出、多图合成、文字渲染、角色一致性
+    const model = 'gemini-3-pro-image-preview'
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`
 
     // 构建请求内容
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest) {
           if (part.inlineData) {
             return Response.json({
               imageUrl: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
-              model: 'banana-pro',
+              model: 'nano-banana-pro',
             })
           }
         }
