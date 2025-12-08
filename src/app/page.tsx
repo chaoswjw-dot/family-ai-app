@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import ChatMessage from '@/components/ChatMessage'
 import ChatInput from '@/components/ChatInput'
 import Sidebar from '@/components/Sidebar'
-import { Message, Conversation, Attachment } from '@/lib/types'
+import { Message, Conversation } from '@/lib/types'
 import {
   getConversations,
   saveConversation,
@@ -22,8 +22,6 @@ export default function Home() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -90,8 +88,8 @@ export default function Home() {
     }
   }, [currentConversation?.id])
 
-  // 发送消息 (支持附件)
-  const handleSendMessage = async (content: string, attachments?: Attachment[]) => {
+  // 发送消息
+  const handleSendMessage = async (content: string) => {
     if (isLoading) return
 
     const userMessage: Message = {
@@ -99,7 +97,6 @@ export default function Home() {
       role: 'user',
       content,
       timestamp: Date.now(),
-      attachments,
     }
 
     // 创建或更新会话
@@ -223,194 +220,6 @@ export default function Home() {
     }
   }
 
-  // 生成图片
-  const handleGenerateImage = async (prompt: string) => {
-    if (isGeneratingImage) return
-
-    const userMessage: Message = {
-      id: uuidv4(),
-      role: 'user',
-      content: `🎨 生成图片: ${prompt}`,
-      timestamp: Date.now(),
-    }
-
-    let conversation: Conversation
-    if (currentConversation) {
-      conversation = {
-        ...currentConversation,
-        messages: [...currentConversation.messages, userMessage],
-        updatedAt: Date.now(),
-      }
-    } else {
-      conversation = {
-        id: uuidv4(),
-        title: '新对话',
-        messages: [userMessage],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }
-    }
-
-    setCurrentConversation(conversation)
-    setIsGeneratingImage(true)
-
-    try {
-      const response = await fetch('/api/image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
-      })
-
-      const data = await response.json()
-
-      let assistantMessage: Message
-      if (data.imageUrl) {
-        assistantMessage = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: `为您生成的图片: "${prompt}"`,
-          imageUrl: data.imageUrl,
-          timestamp: Date.now(),
-        }
-      } else {
-        assistantMessage = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: data.error || '图片生成失败，请稍后重试。',
-          timestamp: Date.now(),
-        }
-      }
-
-      const updatedConversation: Conversation = {
-        ...conversation,
-        messages: [...conversation.messages, assistantMessage],
-        title: conversation.title === '新对话'
-          ? generateTitle([...conversation.messages])
-          : conversation.title,
-        updatedAt: Date.now(),
-      }
-
-      setCurrentConversation(updatedConversation)
-      saveConversation(updatedConversation)
-      setConversations((prev) => {
-        const exists = prev.find((c) => c.id === updatedConversation.id)
-        if (exists) {
-          return prev.map((c) =>
-            c.id === updatedConversation.id ? updatedConversation : c
-          )
-        }
-        return [updatedConversation, ...prev]
-      })
-    } catch (error) {
-      console.error('生成图片失败:', error)
-    } finally {
-      setIsGeneratingImage(false)
-    }
-  }
-
-  // 分析图片 (新增)
-  const handleAnalyzeImage = async (prompt: string, attachment: Attachment) => {
-    if (isAnalyzing) return
-
-    const userMessage: Message = {
-      id: uuidv4(),
-      role: 'user',
-      content: prompt || '请分析这张图片',
-      timestamp: Date.now(),
-      attachments: [attachment],
-    }
-
-    let conversation: Conversation
-    if (currentConversation) {
-      conversation = {
-        ...currentConversation,
-        messages: [...currentConversation.messages, userMessage],
-        updatedAt: Date.now(),
-      }
-    } else {
-      conversation = {
-        id: uuidv4(),
-        title: '新对话',
-        messages: [userMessage],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }
-    }
-
-    setCurrentConversation(conversation)
-    setIsAnalyzing(true)
-
-    try {
-      const response = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: prompt || '请用中文详细描述这张图片的内容',
-          imageUrl: attachment.url,
-        }),
-      })
-
-      const data = await response.json()
-
-      let assistantMessage: Message
-      if (data.success && data.text) {
-        assistantMessage = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: data.text,
-          timestamp: Date.now(),
-        }
-      } else {
-        assistantMessage = {
-          id: uuidv4(),
-          role: 'assistant',
-          content: data.error || '图片分析失败，请稍后重试。',
-          timestamp: Date.now(),
-        }
-      }
-
-      const updatedConversation: Conversation = {
-        ...conversation,
-        messages: [...conversation.messages, assistantMessage],
-        title: conversation.title === '新对话'
-          ? '🔍 图片分析'
-          : conversation.title,
-        updatedAt: Date.now(),
-      }
-
-      setCurrentConversation(updatedConversation)
-      saveConversation(updatedConversation)
-      setConversations((prev) => {
-        const exists = prev.find((c) => c.id === updatedConversation.id)
-        if (exists) {
-          return prev.map((c) =>
-            c.id === updatedConversation.id ? updatedConversation : c
-          )
-        }
-        return [updatedConversation, ...prev]
-      })
-    } catch (error) {
-      console.error('分析图片失败:', error)
-
-      const errorMessage: Message = {
-        id: uuidv4(),
-        role: 'assistant',
-        content: '抱歉，分析图片时出现错误，请稍后重试。',
-        timestamp: Date.now(),
-      }
-
-      const updatedConversation: Conversation = {
-        ...conversation,
-        messages: [...conversation.messages, errorMessage],
-        updatedAt: Date.now(),
-      }
-
-      setCurrentConversation(updatedConversation)
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }
-
   const messages = currentConversation?.messages || []
 
   // 登录页面
@@ -484,13 +293,13 @@ export default function Home() {
 
           {/* 状态指示和登出 */}
           <div className="ml-auto flex items-center gap-3">
-            {(isLoading || isGeneratingImage || isAnalyzing) && (
+            {isLoading && (
               <span className="text-xs text-primary-500 flex items-center gap-1">
                 <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                {isGeneratingImage ? '生成图片中...' : isAnalyzing ? '分析图片中...' : '思考中...'}
+                思考中...
               </span>
             )}
             <button
@@ -513,7 +322,7 @@ export default function Home() {
               <h2 className="text-xl font-medium mb-2">欢迎使用家庭AI助手</h2>
               <p className="text-sm text-center max-w-md">
                 我可以帮你回答问题、写作、翻译、编程等。<br />
-                还可以生成图片或分析上传的图片哦！
+                点击侧边栏的「图片工作室」可以生成或分析图片
               </p>
             </div>
           ) : (
@@ -542,11 +351,7 @@ export default function Home() {
         {/* 输入区域 */}
         <ChatInput
           onSend={handleSendMessage}
-          onGenerateImage={handleGenerateImage}
-          onAnalyzeImage={handleAnalyzeImage}
           disabled={isLoading}
-          isGeneratingImage={isGeneratingImage}
-          isAnalyzing={isAnalyzing}
         />
       </main>
     </div>

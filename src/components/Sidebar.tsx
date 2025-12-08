@@ -26,10 +26,10 @@ export default function Sidebar({
     const now = new Date()
     const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
 
-    if (diffDays === 0) return '今天'
-    if (diffDays === 1) return '昨天'
+    if (diffDays === 0) return "今天"
+    if (diffDays === 1) return "昨天"
     if (diffDays < 7) return `${diffDays}天前`
-    return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+    return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" })
   }
 
   return (
@@ -47,10 +47,10 @@ export default function Sidebar({
         className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-gray-50 dark:bg-gray-900
                    border-r border-gray-200 dark:border-gray-700 flex flex-col
                    transform transition-transform duration-300 ease-in-out
-                   ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+                   ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
         {/* 头部 */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-2">
           <button
             onClick={() => { onNew(); onClose(); }}
             className="w-full py-3 px-4 bg-primary-500 hover:bg-primary-600 text-white
@@ -61,6 +61,16 @@ export default function Sidebar({
             </svg>
             新对话
           </button>
+
+          {/* 图片工作室入口 */}
+          <a
+            href="/studio"
+            className="w-full py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white
+                     rounded-xl font-medium transition-colors flex items-center justify-center gap-2 block"
+          >
+            <span className="text-lg">🎨</span>
+            图片工作室
+          </a>
         </div>
 
         {/* 会话列表 */}
@@ -77,8 +87,8 @@ export default function Sidebar({
                   key={conv.id}
                   className={`group relative rounded-xl transition-colors cursor-pointer
                             ${currentId === conv.id
-                              ? 'bg-primary-100 dark:bg-primary-900/30'
-                              : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                              ? "bg-primary-100 dark:bg-primary-900/30"
+                              : "hover:bg-gray-100 dark:hover:bg-gray-800"
                             }`}
                 >
                   <button
@@ -119,7 +129,7 @@ export default function Sidebar({
         {/* 底部 */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700">
           <div className="text-xs text-gray-400 dark:text-gray-500 text-center">
-            家庭AI助手 v1.0
+            家庭AI助手 v2.0
           </div>
         </div>
       </aside>
