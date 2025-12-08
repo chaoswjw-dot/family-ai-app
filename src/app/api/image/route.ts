@@ -1,12 +1,14 @@
 import { NextRequest } from 'next/server'
 import { HttpsProxyAgent } from 'https-proxy-agent'
+import fs from 'fs'
+import path from 'path'
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
 const PROXY_URL = process.env.HTTPS_PROXY || 'http://192.168.50.2:7890'
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt } = await request.json()
+    const { prompt, sourceImageUrl } = await request.json()
 
     if (!prompt) {
       return Response.json(
@@ -19,10 +21,48 @@ export async function POST(request: NextRequest) {
     const proxyAgent = new HttpsProxyAgent(PROXY_URL)
     const nodeFetch = (await import('node-fetch')).default
 
-    // 使用 Gemini 3 Pro Image (Nano Banana Pro)
-    // 新一代图像生成，支持推理+精细编辑+文本排版+2K-4K分辨率
-    const model = 'gemini-3-pro-image-preview'
+    // 使用 Banana Pro (gemini-2.0-flash-exp-image-generation) 进行图片生成/编辑
+    const model = 'gemini-2.0-flash-exp-image-generation'
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`
+
+    // 构建请求内容
+    const parts: any[] = []
+
+    // 如果有源图片，添加到请求中
+    if (sourceImageUrl) {
+      try {
+        // sourceImageUrl 格式: /uploads/xxx.jpg
+        const filePath = path.join(process.cwd(), 'public', sourceImageUrl)
+
+        if (fs.existsSync(filePath)) {
+          const imageBuffer = fs.readFileSync(filePath)
+          const base64Image = imageBuffer.toString('base64')
+
+          // 根据扩展名确定 MIME 类型
+          const ext = path.extname(sourceImageUrl).toLowerCase()
+          const mimeTypes: Record<string, string> = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp',
+          }
+          const mimeType = mimeTypes[ext] || 'image/jpeg'
+
+          parts.push({
+            inlineData: {
+              mimeType,
+              data: base64Image,
+            }
+          })
+        }
+      } catch (err) {
+        console.error('读取源图片失败:', err)
+      }
+    }
+
+    // 添加文字提示
+    parts.push({ text: prompt })
 
     const response = await nodeFetch(apiUrl, {
       method: 'POST',
@@ -31,7 +71,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         contents: [{
-          parts: [{ text: prompt }]
+          parts,
         }],
         generationConfig: {
           responseModalities: ['TEXT', 'IMAGE'],
@@ -42,24 +82,30 @@ export async function POST(request: NextRequest) {
 
     if (response.ok) {
       const data = await response.json() as any
-      const parts = data.candidates?.[0]?.content?.parts
+      const responseParts = data.candidates?.[0]?.content?.parts
 
-      if (parts) {
-        for (const part of parts) {
+      if (responseParts) {
+        for (const part of responseParts) {
           if (part.inlineData) {
             return Response.json({
               imageUrl: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
-              model: 'gemini-3-pro-image',
+              model: 'banana-pro',
             })
           }
         }
       }
+
+      // 如果没有图片返回，可能是文字回复
+      return Response.json(
+        { error: '未能生成图片，请尝试不同的描述' },
+        { status: 500 }
+      )
     }
 
     // 解析错误信息
     const errorData = await response.json().catch(() => ({})) as any
     const errorMessage = errorData.error?.message || `API 错误 (${response.status})`
-    console.error('Gemini 3 Pro Image error:', response.status, errorMessage)
+    console.error('Banana Pro error:', response.status, errorMessage)
 
     return Response.json(
       { error: `图片生成失败: ${errorMessage}` },
