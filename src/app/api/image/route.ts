@@ -5,7 +5,7 @@ import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
-const PROXY_URL = process.env.HTTPS_PROXY || 'http://192.168.50.2:7890'
+const PROXY_URL = process.env.HTTPS_PROXY || 'http://192.168.50.6:7890'
 
 export async function POST(request: NextRequest) {
   try {

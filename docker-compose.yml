@@ -5,16 +5,9 @@ services:
     build: .
     container_name: family-ai-app
     restart: always
-    ports:
-      - "3000:3000"
+    network_mode: host
     environment:
       - NODE_ENV=production
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-    networks:
-      - app-network
-
-networks:
-  app-network:
-    driver: bridge

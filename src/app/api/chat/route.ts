@@ -1,10 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { NextRequest } from 'next/server'
+import { HttpsProxyAgent } from 'https-proxy-agent'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-  baseURL: process.env.ANTHROPIC_BASE_URL,
-})
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
+const PROXY_URL = process.env.HTTPS_PROXY || 'http://192.168.50.6:7890'
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,52 +15,76 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 转换消息格式
-    const formattedMessages = messages.map((msg: { role: string; content: string }) => ({
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
+    if (!GEMINI_API_KEY) {
+      return Response.json(
+        { error: 'API Key 未配置' },
+        { status: 500 }
+      )
+    }
+
+    // 创建代理 agent
+    const proxyAgent = new HttpsProxyAgent(PROXY_URL)
+    const nodeFetch = (await import('node-fetch')).default
+
+    // 转换消息格式为 Gemini 格式
+    const geminiMessages = messages.map((msg: { role: string; content: string }) => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
     }))
 
-    // 创建流式响应
-    const stream = await anthropic.messages.stream({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: `你是一个友好的家庭AI助手。请用中文回答问题，保持回答简洁有帮助。
-如果用户想生成图片，请告诉他们点击输入框旁边的图片按钮。`,
-      messages: formattedMessages,
-    })
+    // 添加系统指令
+    const systemInstruction = '你是一个友好的家庭AI助手。请用中文回答问题，保持回答简洁有帮助。'
 
-    // 返回流式响应
-    const encoder = new TextEncoder()
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const event of stream) {
-            if (event.type === 'content_block_delta') {
-              const delta = event.delta as { type: string; text?: string }
-              if (delta.type === 'text_delta' && delta.text) {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({ text: delta.text })}\n\n`)
-                )
-              }
-            }
-          }
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-          controller.close()
-        } catch (error) {
-          console.error('Stream error:', error)
-          controller.error(error)
-        }
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`
+
+    const response = await nodeFetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        contents: geminiMessages,
+        systemInstruction: {
+          parts: [{ text: systemInstruction }]
+        },
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 2048,
+        }
+      }),
+      agent: proxyAgent,
     })
 
-    return new Response(readable, {
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Gemini API Error:', response.status, errorText)
+      return Response.json(
+        { error: '服务暂时不可用' },
+        { status: response.status }
+      )
+    }
+
+    const data = await response.json() as any
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || ''
+
+    // 返回 SSE 格式（与前端兼容）
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: content })}\n\n`))
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+        controller.close()
+      }
+    })
+
+    return new Response(stream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
+        'Connection': 'keep-alive',
       },
     })
+
   } catch (error) {
     console.error('Chat API error:', error)
     return Response.json(
