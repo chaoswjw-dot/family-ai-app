@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     await writeFile(filePath, buffer)
 
-    // 生成访问URL
-    const url = `/uploads/${year}/${month}/${filename}`
+    // 生成访问URL（通过 API 路由访问，解决 standalone 模式下静态文件问题）
+    const url = `/api/file/uploads/${year}/${month}/${filename}`
 
     // 返回成功响应
     return NextResponse.json({

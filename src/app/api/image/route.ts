@@ -32,8 +32,13 @@ export async function POST(request: NextRequest) {
     // 如果有源图片，添加到请求中
     if (sourceImageUrl) {
       try {
-        // sourceImageUrl 格式: /uploads/xxx.jpg
-        const filePath = path.join(process.cwd(), 'public', sourceImageUrl)
+        // sourceImageUrl 格式: /api/file/uploads/xxx.jpg 或 /uploads/xxx.jpg
+        // 提取实际的文件路径
+        let relativePath = sourceImageUrl
+        if (relativePath.startsWith('/api/file/')) {
+          relativePath = relativePath.replace('/api/file/', '')
+        }
+        const filePath = path.join(process.cwd(), 'public', relativePath)
 
         if (fs.existsSync(filePath)) {
           const imageBuffer = fs.readFileSync(filePath)
