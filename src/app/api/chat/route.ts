@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     // 创建流式响应
     const stream = await anthropic.messages.stream({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
       system: `你是一个友好的家庭AI助手。请用中文回答问题，保持回答简洁有帮助。
 如果用户想生成图片，请告诉他们点击输入框旁边的图片按钮。`,
