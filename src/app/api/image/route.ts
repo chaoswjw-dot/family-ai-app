@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import fs from 'fs'
 import path from 'path'
+import { v4 as uuidv4 } from 'uuid'
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''
 const PROXY_URL = process.env.HTTPS_PROXY || 'http://192.168.50.2:7890'
@@ -32,35 +33,53 @@ export async function POST(request: NextRequest) {
     // 如果有源图片，添加到请求中
     if (sourceImageUrl) {
       try {
-        // sourceImageUrl 格式: /api/file/uploads/xxx.jpg 或 /uploads/xxx.jpg
-        // 提取实际的文件路径
-        let relativePath = sourceImageUrl
-        if (relativePath.startsWith('/api/file/')) {
-          relativePath = relativePath.replace('/api/file/', '')
-        }
-        const filePath = path.join(process.cwd(), 'public', relativePath)
+        let base64Image: string | null = null
+        let mimeType = 'image/png'
 
-        if (fs.existsSync(filePath)) {
-          const imageBuffer = fs.readFileSync(filePath)
-          const base64Image = imageBuffer.toString('base64')
-
-          // 根据扩展名确定 MIME 类型
-          const ext = path.extname(sourceImageUrl).toLowerCase()
-          const mimeTypes: Record<string, string> = {
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp',
+        // 检查是否是 base64 格式（之前生成的图片）
+        if (sourceImageUrl.startsWith('data:')) {
+          // 解析 data URL: data:image/png;base64,xxxxx
+          const matches = sourceImageUrl.match(/^data:([^;]+);base64,(.+)$/)
+          if (matches) {
+            mimeType = matches[1]
+            base64Image = matches[2]
           }
-          const mimeType = mimeTypes[ext] || 'image/jpeg'
+        } else {
+          // 文件路径格式: /api/file/uploads/xxx.jpg 或 /uploads/xxx.jpg
+          let relativePath = sourceImageUrl
+          if (relativePath.startsWith('/api/file/')) {
+            relativePath = relativePath.replace('/api/file/', '')
+          }
+          if (relativePath.startsWith('/')) {
+            relativePath = relativePath.slice(1)
+          }
+          const filePath = path.join(process.cwd(), 'public', relativePath)
 
+          if (fs.existsSync(filePath)) {
+            const imageBuffer = fs.readFileSync(filePath)
+            base64Image = imageBuffer.toString('base64')
+
+            // 根据扩展名确定 MIME 类型
+            const ext = path.extname(filePath).toLowerCase()
+            const mimeTypes: Record<string, string> = {
+              '.jpg': 'image/jpeg',
+              '.jpeg': 'image/jpeg',
+              '.png': 'image/png',
+              '.gif': 'image/gif',
+              '.webp': 'image/webp',
+            }
+            mimeType = mimeTypes[ext] || 'image/jpeg'
+          }
+        }
+
+        if (base64Image) {
           parts.push({
             inlineData: {
               mimeType,
               data: base64Image,
             }
           })
+          console.log('源图片已添加, mimeType:', mimeType, 'base64长度:', base64Image.length)
         }
       } catch (err) {
         console.error('读取源图片失败:', err)
@@ -69,6 +88,8 @@ export async function POST(request: NextRequest) {
 
     // 添加文字提示
     parts.push({ text: prompt })
+
+    console.log('发送请求到 Gemini, parts 数量:', parts.length)
 
     const response = await nodeFetch(apiUrl, {
       method: 'POST',
@@ -93,8 +114,38 @@ export async function POST(request: NextRequest) {
       if (responseParts) {
         for (const part of responseParts) {
           if (part.inlineData) {
+            // 保存生成的图片到文件
+            const now = new Date()
+            const year = now.getFullYear()
+            const month = String(now.getMonth() + 1).padStart(2, '0')
+            const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'generated', String(year), month)
+
+            // 确保目录存在
+            fs.mkdirSync(uploadDir, { recursive: true })
+
+            // 确定文件扩展名
+            const mimeType = part.inlineData.mimeType || 'image/png'
+            const extMap: Record<string, string> = {
+              'image/png': '.png',
+              'image/jpeg': '.jpg',
+              'image/gif': '.gif',
+              'image/webp': '.webp',
+            }
+            const ext = extMap[mimeType] || '.png'
+
+            // 生成文件名并保存
+            const filename = `${uuidv4()}${ext}`
+            const filePath = path.join(uploadDir, filename)
+            const imageBuffer = Buffer.from(part.inlineData.data, 'base64')
+            fs.writeFileSync(filePath, imageBuffer)
+
+            // 返回文件 URL
+            const fileUrl = `/api/file/uploads/generated/${year}/${month}/${filename}`
+
+            console.log('图片已保存:', filePath)
+
             return Response.json({
-              imageUrl: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
+              imageUrl: fileUrl,
               model: 'nano-banana-pro',
             })
           }
