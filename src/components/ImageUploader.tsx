@@ -8,13 +8,15 @@ interface ImageUploaderProps {
   onRemove: (id: string) => void
   attachments: Attachment[]
   disabled?: boolean
+  onPreview?: (url: string) => void  // 预览回调
 }
 
 export default function ImageUploader({
   onUpload,
   onRemove,
   attachments,
-  disabled = false
+  disabled = false,
+  onPreview
 }: ImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
@@ -119,12 +121,14 @@ export default function ImageUploader({
           {attachments.map((attachment) => (
             <div
               key={attachment.id}
-              className="relative group w-16 h-16 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700"
+              className="relative group w-20 h-20 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700"
             >
               <img
                 src={attachment.url}
                 alt={attachment.filename}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                onDoubleClick={() => onPreview?.(attachment.url)}
+                title="双击放大"
               />
               <button
                 onClick={() => onRemove(attachment.id)}
@@ -133,6 +137,9 @@ export default function ImageUploader({
               >
                 ×
               </button>
+              <span className="absolute bottom-0.5 left-0.5 bg-black/50 text-white text-[10px] px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                双击放大
+              </span>
             </div>
           ))}
         </div>

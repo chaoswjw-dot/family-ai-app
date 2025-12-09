@@ -122,6 +122,7 @@ export default function StudioPage() {
               onRemove={handleRemove}
               attachments={attachments}
               disabled={isProcessing}
+              onPreview={(url) => setShowFullImage(url)}
             />
           </div>
 
